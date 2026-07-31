@@ -1,0 +1,28 @@
+# Замените yourdomain.com на купленный домен.
+# Caddy сам получит и будет продлевать сертификат Let's Encrypt — ничего настраивать вручную не нужно.
+
+yourdomain.com {
+    # API уходит на бэкенд, который слушает локально порт 8000
+    handle /auth/* {
+        reverse_proxy localhost:8000
+    }
+    handle /chat* {
+        reverse_proxy localhost:8000
+    }
+    handle /health {
+        reverse_proxy localhost:8000
+    }
+    handle /docs* {
+        reverse_proxy localhost:8000
+    }
+    handle /openapi.json {
+        reverse_proxy localhost:8000
+    }
+
+    # Всё остальное — статика фронта
+    handle {
+        root * /var/www/hr-agent-frontend
+        try_files {path} /index.html
+        file_server
+    }
+}

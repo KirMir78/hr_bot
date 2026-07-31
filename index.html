@@ -1,0 +1,272 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>HR-агент</title>
+<style>
+  :root {
+    --ink: #1f2a24;
+    --paper: #f6f4ee;
+    --paper-raised: #ffffff;
+    --line: #dcd7c9;
+    --accent: #3b5d4f;
+    --accent-soft: #e4ecE7;
+    --muted: #7a7568;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    min-height: 100vh;
+    background: var(--paper);
+    color: var(--ink);
+    font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 24px;
+  }
+
+  .app {
+    width: 100%;
+    max-width: 640px;
+  }
+
+  .brand {
+    display: flex;
+    align-items: baseline;
+    gap: 10px;
+    margin-bottom: 4px;
+  }
+  .brand-mark {
+    width: 10px; height: 10px;
+    background: var(--accent);
+    border-radius: 2px;
+  }
+  .brand h1 {
+    font-family: Georgia, 'Times New Roman', serif;
+    font-size: 22px;
+    font-weight: 600;
+    margin: 0;
+    letter-spacing: 0.2px;
+  }
+  .brand small {
+    color: var(--muted);
+    font-size: 13px;
+  }
+
+  .card {
+    background: var(--paper-raised);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    margin-top: 20px;
+    overflow: hidden;
+  }
+
+  /* --- экран логина --- */
+  #login-screen { padding: 40px 32px; text-align: center; }
+  #login-screen p { color: var(--muted); font-size: 14px; line-height: 1.5; margin-bottom: 24px; }
+  #telegram-login-container { display: flex; justify-content: center; }
+  .dev-login {
+    margin-top: 16px;
+    font-size: 12px;
+    color: var(--muted);
+    background: none;
+    border: 1px dashed var(--line);
+    border-radius: 6px;
+    padding: 8px 14px;
+    cursor: pointer;
+  }
+  .dev-login:hover { border-color: var(--accent); color: var(--accent); }
+
+  /* --- экран чата --- */
+  #chat-screen { display: none; flex-direction: column; height: 70vh; }
+  .chat-header {
+    display: flex; justify-content: space-between; align-items: center;
+    padding: 14px 18px; border-bottom: 1px solid var(--line); font-size: 13px; color: var(--muted);
+  }
+  .chat-header button {
+    background: none; border: none; color: var(--muted); font-size: 12px; cursor: pointer; text-decoration: underline;
+  }
+  #messages {
+    flex: 1; overflow-y: auto; padding: 20px; display: flex; flex-direction: column; gap: 12px;
+  }
+  .msg { max-width: 78%; padding: 10px 14px; border-radius: 10px; font-size: 14.5px; line-height: 1.45; white-space: pre-wrap; }
+  .msg.user { align-self: flex-end; background: var(--accent); color: #fff; border-bottom-right-radius: 3px; }
+  .msg.assistant { align-self: flex-start; background: var(--accent-soft); color: var(--ink); border-bottom-left-radius: 3px; }
+  .msg.pending { opacity: 0.6; font-style: italic; }
+
+  .composer {
+    display: flex; gap: 8px; padding: 14px 16px; border-top: 1px solid var(--line);
+  }
+  .composer input {
+    flex: 1; border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px;
+    font-size: 14px; font-family: inherit; outline: none;
+  }
+  .composer input:focus { border-color: var(--accent); }
+  .composer button {
+    background: var(--accent); color: #fff; border: none; border-radius: 8px;
+    padding: 0 18px; font-size: 14px; cursor: pointer;
+  }
+  .composer button:disabled { opacity: 0.5; cursor: default; }
+</style>
+</head>
+<body>
+
+<div class="app">
+  <div class="brand">
+    <div class="brand-mark"></div>
+    <h1>HR-агент</h1>
+    <small>MVP · диалоговый режим</small>
+  </div>
+
+  <div class="card">
+    <!-- Экран логина -->
+    <div id="login-screen">
+      <p>Войдите через Telegram, чтобы начать разговор с HR-агентом.</p>
+      <div id="telegram-login-container"></div>
+      <br>
+      <button class="dev-login" onclick="devLogin()">Войти как тестовый пользователь (dev)</button>
+    </div>
+
+    <!-- Экран чата -->
+    <div id="chat-screen">
+      <div class="chat-header">
+        <span id="user-label"></span>
+        <button onclick="logout()">Выйти</button>
+      </div>
+      <div id="messages"></div>
+      <div class="composer">
+        <input id="input" type="text" placeholder="Спросите про отпуск, справки, адаптацию..." onkeydown="if(event.key==='Enter') sendMessage()" />
+        <button id="send-btn" onclick="sendMessage()">Отправить</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+  // ---- Настройки: поменяйте под свой бэкенд/бота ----
+  const API_BASE = "http://localhost:8000";
+  const TELEGRAM_BOT_USERNAME = "your_hr_bot"; // без @
+
+  let accessToken = localStorage.getItem("access_token");
+  let userLabel = localStorage.getItem("user_label");
+
+  // ---- Telegram Login Widget ----
+  // Работает только на https-домене, зарегистрированном в BotFather (/setdomain).
+  // Для локальной разработки используйте кнопку "Войти как тестовый пользователь".
+  function renderTelegramWidget() {
+    const container = document.getElementById("telegram-login-container");
+    const script = document.createElement("script");
+    script.src = "https://telegram.org/js/telegram-widget.js?22";
+    script.setAttribute("data-telegram-login", TELEGRAM_BOT_USERNAME);
+    script.setAttribute("data-size", "large");
+    script.setAttribute("data-onauth", "onTelegramAuth(user)");
+    script.setAttribute("data-request-access", "write");
+    container.appendChild(script);
+  }
+
+  async function onTelegramAuth(user) {
+    const res = await fetch(`${API_BASE}/auth/telegram`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(user),
+    });
+    if (!res.ok) { alert("Не удалось войти через Telegram"); return; }
+    const data = await res.json();
+    finishLogin(data);
+  }
+
+  async function devLogin() {
+    const res = await fetch(`${API_BASE}/auth/dev-login`, { method: "POST" });
+    if (!res.ok) { alert("Dev-логин недоступен (APP_ENV != dev на бэкенде)"); return; }
+    const data = await res.json();
+    finishLogin(data);
+  }
+
+  function finishLogin(data) {
+    accessToken = data.access_token;
+    userLabel = data.user.first_name || "Пользователь";
+    localStorage.setItem("access_token", accessToken);
+    localStorage.setItem("user_label", userLabel);
+    showChat();
+  }
+
+  function logout() {
+    localStorage.removeItem("access_token");
+    localStorage.removeItem("user_label");
+    accessToken = null;
+    location.reload();
+  }
+
+  // ---- Чат ----
+  async function showChat() {
+    document.getElementById("login-screen").style.display = "none";
+    document.getElementById("chat-screen").style.display = "flex";
+    document.getElementById("user-label").textContent = userLabel;
+    await loadHistory();
+  }
+
+  async function loadHistory() {
+    const res = await fetch(`${API_BASE}/chat/history`, {
+      headers: { Authorization: `Bearer ${accessToken}` },
+    });
+    if (!res.ok) return;
+    const history = await res.json();
+    const box = document.getElementById("messages");
+    box.innerHTML = "";
+    history.forEach(m => appendMessage(m.role, m.content));
+    box.scrollTop = box.scrollHeight;
+  }
+
+  function appendMessage(role, text, pending = false) {
+    const box = document.getElementById("messages");
+    const el = document.createElement("div");
+    el.className = `msg ${role === "user" ? "user" : "assistant"}${pending ? " pending" : ""}`;
+    el.textContent = text;
+    box.appendChild(el);
+    box.scrollTop = box.scrollHeight;
+    return el;
+  }
+
+  async function sendMessage() {
+    const input = document.getElementById("input");
+    const text = input.value.trim();
+    if (!text) return;
+    input.value = "";
+    document.getElementById("send-btn").disabled = true;
+
+    appendMessage("user", text);
+    const pendingEl = appendMessage("assistant", "печатает...", true);
+
+    try {
+      const res = await fetch(`${API_BASE}/chat`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${accessToken}`,
+        },
+        body: JSON.stringify({ message: text }),
+      });
+      if (!res.ok) throw new Error("request failed");
+      const data = await res.json();
+      pendingEl.textContent = data.reply;
+      pendingEl.classList.remove("pending");
+    } catch (e) {
+      pendingEl.textContent = "Не удалось получить ответ. Попробуйте ещё раз.";
+      pendingEl.classList.remove("pending");
+    } finally {
+      document.getElementById("send-btn").disabled = false;
+    }
+  }
+
+  // ---- Инициализация ----
+  if (accessToken) {
+    showChat();
+  } else {
+    renderTelegramWidget();
+  }
+</script>
+
+</body>
+</html>
