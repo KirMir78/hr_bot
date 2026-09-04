@@ -63,7 +63,7 @@
     overflow: hidden;
   }
 
-  /* --- экран логина --- */
+  /* --- Экран логина --- */
   #login-screen { padding: 40px 32px; text-align: center; }
   #login-screen p { color: var(--muted); font-size: 14px; line-height: 1.5; margin-bottom: 24px; }
   #telegram-login-container { display: flex; justify-content: center; }
@@ -79,7 +79,7 @@
   }
   .dev-login:hover { border-color: var(--accent); color: var(--accent); }
 
-  /* --- экран чата --- */
+  /* --- Экран чата --- */
   #chat-screen { display: none; flex-direction: column; height: 70vh; }
   .chat-header {
     display: flex; justify-content: space-between; align-items: center;
@@ -133,7 +133,10 @@
     <div id="chat-screen">
       <div class="chat-header">
         <span id="user-label"></span>
-        <button onclick="logout()">Выйти</button>
+        <div style="display: flex; gap: 12px;">
+          <button onclick="clearHistory()">Новый чат</button>
+          <button onclick="logout()">Выйти</button>
+        </div>
       </div>
       <div id="messages"></div>
       <div class="composer">
@@ -146,8 +149,8 @@
 
 <script>
   // ---- Настройки: поменяйте под свой бэкенд/бота ----
-  const API_BASE = "http://localhost:8000";
-  const TELEGRAM_BOT_USERNAME = "your_hr_bot"; // без @
+  const API_BASE = "https://hragent.sbs";
+  const TELEGRAM_BOT_USERNAME = "hr_vv_bot"; // без @
 
   let accessToken = localStorage.getItem("access_token");
   let userLabel = localStorage.getItem("user_label");
@@ -190,6 +193,21 @@
     localStorage.setItem("access_token", accessToken);
     localStorage.setItem("user_label", userLabel);
     showChat();
+  }
+
+  async function clearHistory() {
+    if (!confirm("Очистить всю историю диалога?")) return;
+    try {
+      const res = await fetch(`${API_BASE}/chat/history`, {
+        method: "DELETE",
+        headers: { Authorization: `Bearer ${accessToken}` },
+      });
+      if (!res.ok) throw new Error("failed");
+      const box = document.getElementById("messages");
+      box.innerHTML = "";
+    } catch (e) {
+      alert("Не удалось очистить историю");
+    }
   }
 
   function logout() {

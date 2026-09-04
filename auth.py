@@ -58,6 +58,23 @@ def get_or_create_user(db: Session, data: dict) -> User:
         db.add(user)
         db.commit()
         db.refresh(user)
+
+    # ----- НАЧАЛО БЛОКА ПРОВЕРКИ БЕЛОГО СПИСКА -----
+    # Проверка только в продакшене (когда APP_ENV=prod)
+    if settings.app_env == "prod":
+        allowed_raw = settings.allowed_users  # берём из переменной окружения
+        if allowed_raw:
+            allowed_list = [u.strip() for u in allowed_raw.split(",") if u.strip()]
+            # Если список не пуст, проверяем, что username пользователя есть в списке
+            if allowed_list:
+                username = data.get("username")
+                if not username or username not in allowed_list:
+                    raise HTTPException(
+                        status_code=status.HTTP_403_FORBIDDEN,
+                        detail="Access denied. You are not in the allowed users list."
+                    )
+    # ----- КОНЕЦ БЛОКА ПРОВЕРКИ -----
+
     return user
 
 

@@ -13,6 +13,9 @@ class Settings(BaseSettings):
 
     database_url: str = "sqlite:///./hr_agent.db"
 
+    # --- Добавь эту строку ---
+    allowed_users: str = ""
+
     class Config:
         env_file = ".env"
 

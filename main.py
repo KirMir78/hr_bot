@@ -8,7 +8,13 @@ from database import Base, engine, get_db
 from models import User, Message
 from auth import verify_telegram_login, get_or_create_user, create_access_token, get_current_user
 from agent import get_agent_reply
+import logging
 
+# Настраиваем логирование
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(levelname)s %(name)s: %(message)s'
+)
 Base.metadata.create_all(bind=engine)
 
 app = FastAPI(title="HR Agent API")
@@ -86,7 +92,7 @@ def dev_login(db: Session = Depends(get_db)):
 # ---------- chat ----------
 
 @app.post("/chat", response_model=ChatResponse)
-def chat(req: ChatRequest, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+async def chat(req: ChatRequest, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     # сохраняем сообщение пользователя
     db.add(Message(user_id=user.id, role="user", content=req.message))
     db.commit()
@@ -101,7 +107,8 @@ def chat(req: ChatRequest, user: User = Depends(get_current_user), db: Session =
     )
     history = [{"role": m.role, "content": m.content} for m in reversed(history_rows)]
 
-    reply = get_agent_reply(history)
+    # ВАЖНО: добавляем await
+    reply = await get_agent_reply(history)
 
     db.add(Message(user_id=user.id, role="assistant", content=reply))
     db.commit()
@@ -119,6 +126,12 @@ def chat_history(user: User = Depends(get_current_user), db: Session = Depends(g
     )
     return [{"role": m.role, "content": m.content, "created_at": m.created_at.isoformat()} for m in rows]
 
+@app.delete("/chat/history")
+def clear_chat_history(user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    """Удаляет всю историю диалога текущего пользователя."""
+    db.query(Message).filter(Message.user_id == user.id).delete()
+    db.commit()
+    return {"status": "ok", "message": "История очищена"}
 
 @app.get("/health")
 def health():
